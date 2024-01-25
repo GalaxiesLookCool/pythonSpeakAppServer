@@ -185,7 +185,7 @@ class LockableSqliteConnection:
             pic = DEFAULT_CHAT_IMAGE
         else:
             pic = data[1]
-        return {"name": data[0], "picture": "", "type": data[2], "id": data[3], "members": json.loads(data[4])}
+        return {"name": data[0], "picture": pic, "type": data[2], "id": data[3], "members": json.loads(data[4])}
 
     def fetch_group_ids(self, user_id: str) -> list:
         """
