@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1
-FROM scratch
-COPY actualpythonserver
+# docker file of the python server to run
+FROM python
+COPY actualpythonserver .
 RUN pip install -r requirements.txt
-CMD ["python main.py"]
+CMD ["ls"]
+CMD ["python",  "main.py"]
