@@ -70,8 +70,6 @@ class BroadCaster:
                             messageProt.messageProt.send_msg(sock, json.dumps(new_message))
         #log.warning(f"event type is {event_type}")
 
-    def broadcast_message(self, message_dict: dict, targets: list):
-        pass
 
     def add_to_available_list(self, user_id: str, token:str ,sock: socket.socket):
         """
