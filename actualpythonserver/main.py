@@ -140,12 +140,16 @@ def main():
     newSocket = createConn()
     while True:
         try:
+            print("trying to get a client")
             (clientsocket, address) = newSocket.accept()
+            print("got a new client")
             print(address)
             newSocketThread = threading.Thread(target=user_handler.handler_thread_function, args=(brdcstr, clientsocket, lsc,))
             newSocketThread.start()
         except KeyboardInterrupt:
             print("trying to press ctrl C")
+        except Exception as e:
+            print(str(e))
 
 if __name__ == "__main__":
     main()

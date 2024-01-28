@@ -297,7 +297,7 @@ def do_create(create_args: dict, sql_lockable: dataBaseClass.LockableSqliteConne
                 return new_chat_id
         case "msg":
             if "group_id" not in create_args or "msg_content" not in create_args or "token" not in create_args:
-                raise ValueError("invalid create args")
+                raise ValueError(f"invalid create args - missing group_id or msg_content or token. create args is {create_args}")
             user_id = sql_lockable.token_to_id(create_args["token"])
             if str(user_id) not in sql_lockable.get_group_participants(create_args["group_id"]):
                 raise messages.AuthError("user not in group")
@@ -458,7 +458,7 @@ def _handler_thread_function(broadcaster_instance: BroadCaster, sock: socket.soc
                     messageProt.messageProt.send_msg(sock, message_string, seq)
                 elif is_create_message(message_dict):
                     if "create-args" not in message_dict:
-                        raise ValueError("invalid create args")
+                        raise ValueError("invalid create args - missing create args")
                     new_id = do_create(message_dict["create-args"], sql_lockable)
                     message_string = encode_data(return_create_data(new_id))
                     messageProt.messageProt.send_msg(sock, message_string, seq)
