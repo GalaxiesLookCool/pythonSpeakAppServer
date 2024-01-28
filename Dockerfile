@@ -3,5 +3,6 @@
 FROM python
 COPY actualpythonserver .
 RUN pip install -r requirements.txt
+EXPOSE 8969/tcp
 CMD ["ls"]
 CMD ["python",  "main.py"]
