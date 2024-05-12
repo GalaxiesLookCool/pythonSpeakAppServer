@@ -8,10 +8,7 @@ import time
 
 import messages
 import traceback
-import user_handler
-
-from pycallgraph2 import PyCallGraph
-from pycallgraph2.output import GraphvizOutput
+#import user_handler
 
 import sqlite3
 from sqlite3 import Error
@@ -19,8 +16,17 @@ from sqlite3 import Error
 import signal
 import sys
 
+import user_handler
+from voip_server import voip_server_class
+from user_handler_oop import start_thread
 
 def func(signum, frame):
+    """
+    function that handles the SIGINT signal
+    :param signum: the signum
+    :param frame: and the frane
+    :return: nothing, but raises exception (this is for catching the exit signal)
+    """
     print (f"You raised a SigInt! Signal handler called with signal {signum}")
     raise Exception("should quit")
 
@@ -32,6 +38,10 @@ HOSTPORT = 8969
 
 
 def createConn():
+    """
+    function that creates a socket object and binds and listens to it
+    :return: the socket
+    """
     socketServer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     socketServer.bind((HOSTBIND, HOSTPORT))
     socketServer.listen(1)
@@ -46,14 +56,18 @@ sql_create_users_table = """ CREATE TABLE IF NOT EXISTS users (
                                         uname text NOT NULL,
                                         arrayOfChats text,
                                         password text NOT NULL,
-                                        picture text
+                                        picture text,
+                                        enabled integer NOT NULL,
+                                        lastcode text,
+                                        lastissuedtoken text
                                     ); """
 sql_create_chats_table = """ CREATE TABLE IF NOT EXISTS chats (
                                         id integer PRIMARY KEY,
                                         name text,
                                         groupmembersbyid text,
                                         picture text,
-                                        type int                                        
+                                        type int,
+                                        metadata text DEFAULT '{}'                                 
                                     ); """
 
 sql_create_tokens_table = """ CREATE TABLE IF NOT EXISTS tokens (
@@ -61,7 +75,9 @@ sql_create_tokens_table = """ CREATE TABLE IF NOT EXISTS tokens (
                                         token text NOT NULL,
                                         timeissued text NOT NULL,
                                         timestopped text,
-                                        userid integer NOT NULL
+                                        userid integer NOT NULL,
+                                        tokentype text,
+                                        ip text
                                     ); """
 
 
@@ -78,56 +94,19 @@ def create_table(conn, create_table_sql):
         print(traceback.format_exc())
         print(e)
 
-def loginHandler(sock, dbo, clientMap, clientLock):
-    """
-    function that handles the specific login/registering messages
-    :param sock: a socket object
-    :param dbo: an sqllite object
-    :param resultArr: an array that the result of the thread will be stored in
-    """
-    try:
-        (identMsg, seq) = messageProt.messageProt.recv_msg(sock)
-    except OSError:
-        print(traceback.format_exc())
-        print("quitting thread")
-        return
-    except Exception as e:
-        return loginHandler(sock, dbo ,clientMap, clientLock)
-    identMsg = json.loads(identMsg.decode(errors='ignore'))
-    print(identMsg)
-    if (identMsg["type"] == "LOGIN"):
-        (id, token) = dataBaseClass.doLogin(dbo, identMsg["email"], identMsg["pswd"])
-        print(f"id - {id} , token - {token}")
-        messageProt.messageProt.send_msg(sock, json.dumps({"success" : "1" if len(token) == 20 else "0", "token" : token, "id" : id}), seq)
-        if len(token) == 20:
-            # User.updateUSERON(self._dbo, identMsg["uname"], 1)
-            print(f"id is {id}")
-            with clientLock:
-                if not str(id) in clientMap:
-                    clientMap[str(id)] = [sock]
-                else:
-                    clientMap[str(id)].append(sock)
-            return (token, id)
-        return loginHandler(sock, dbo ,clientMap, clientLock)
-
-    else:
-        if (identMsg["type"] == "SIGNUP"):
-            if not ("email" in identMsg and "uname" in identMsg and "pswd" in identMsg and "pfp" in identMsg):
-                messageProt.messageProt.send_msg(sock, json.dumps({"success" : "0","errorMsg" : "invalid list of arguements - must include email field, uname field, pswd field, and a pfp field" }))
-                return loginHandler(sock, dbo ,clientMap, clientLock)
-            isSuccess = dataBaseClass.doSignup(dbo, identMsg["email"], identMsg["uname"], identMsg["pswd"], identMsg["pfp"])
-            print(isSuccess)
-            if isSuccess:
-                messageProt.messageProt.send_msg(sock, json.dumps({"success" : "1"}), seq)
-                return loginHandler(sock, dbo ,clientMap, clientLock)
-            messageProt.messageProt.send_msg(sock, json.dumps({"success" : "0", "errorMsg" : "database error"}), seq)
-            return loginHandler(sock, dbo ,clientMap, clientLock)
-
-
 
 def main():
+    """
+    main function - entry point
+    :return: none
+    """
     lsc = dataBaseClass.LockableSqliteConnection(r"pythonsqlite.db")
     brdcstr = user_handler.BroadCaster()
+
+    voip_handler = voip_server_class()
+    new_voip_thread = threading.Thread(target=voip_handler.run)
+    new_voip_thread.start()
+
     # create tables
     with lsc:
         create_table(lsc.connection,sql_create_users_table)
@@ -144,7 +123,8 @@ def main():
             (clientsocket, address) = newSocket.accept()
             print("got a new client")
             print(address)
-            newSocketThread = threading.Thread(target=user_handler.handler_thread_function, args=(brdcstr, clientsocket, lsc,))
+            newSocketThread = threading.Thread(target=start_thread, args=(brdcstr, clientsocket ,lsc, new_voip_thread))
+            #newSocketThread = threading.Thread(target=user_handler.handler_thread_function, args=(brdcstr, clientsocket, lsc, callhandler))
             newSocketThread.start()
         except KeyboardInterrupt:
             print("trying to press ctrl C")
