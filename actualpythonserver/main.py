@@ -1,3 +1,4 @@
+import os
 import socket
 import json
 import messageProt
@@ -106,6 +107,10 @@ def main():
     voip_handler = voip_server_class()
     new_voip_thread = threading.Thread(target=voip_handler.run)
     new_voip_thread.start()
+
+    files_folder = 'files'
+    if not os.path.exists(files_folder):
+        os.makedirs(files_folder)
 
     # create tables
     with lsc:

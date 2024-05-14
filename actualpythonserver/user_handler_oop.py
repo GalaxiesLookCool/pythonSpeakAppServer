@@ -332,7 +332,7 @@ class user_handler_object:
                     raise messages.AuthError("invalid user")
                 if not self.sql_lockable.is_group_exists(update_args["group_id"]):
                     raise messages.AuthError("group doesnt exist")
-                if str(self.sql_lockable.token_to_id(update_args["token"])) not in self.sql_lockable.get_group_participants(
+                if self.sql_lockable.token_to_id(update_args["token"]) not in self.sql_lockable.get_group_participants(
                         update_args["group_id"]):
                     raise messages.AuthError("user not in group!")
                 if not self.sql_lockable.is_message_exists(update_args["group_id"], update_args["msg_id"]):
@@ -383,7 +383,7 @@ class user_handler_object:
                     raise messages.AuthError("invalid user")
                 if not self.sql_lockable.is_group_exists(update_args["group_id"]):
                     raise ValueError("invalid group")
-                if str(self.sql_lockable.token_to_id(update_args["token"])) not in self.sql_lockable.get_group_participants(
+                if self.sql_lockable.token_to_id(update_args["token"]) not in self.sql_lockable.get_group_participants(
                         update_args["group_id"]):
                     raise messages.AuthError("user not in group!")
                 if not self.sql_lockable.is_message_exists(update_args["group_id"], update_args["msg_id"]):
