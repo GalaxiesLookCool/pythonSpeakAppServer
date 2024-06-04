@@ -63,7 +63,7 @@ class messageProt:
         iv = get_random_bytes(12)
         cipher_object = AES.new(key=self.aes_key, mode=AES.MODE_GCM, nonce=iv)
         ciphertext, auth_tag = cipher_object.encrypt_and_digest(data)
-        print(auth_tag)
+        #print(auth_tag)
         json_data = {
             "aes_iv": base64.b64encode(iv).decode(),
             "auth_tag": base64.b64encode(auth_tag).decode(),
@@ -131,8 +131,7 @@ class messageProt:
         :param seq_number: sequence number in int
         :return: none
         """
-        print("sending msg in message prot")
-        print(msg)
+        #print(msg)
         if (type(msg) is str):
             msg = msg.encode()
         if self.aes_used:
@@ -144,7 +143,7 @@ class messageProt:
         # and prefix each message with a 4-byte seq number
         #msg = struct.pack('>I', len(msg)) + seq_number + msg
         self.sock.sendall(msg)
-        print("sent msg")
+        #print("sent msg")
 
     @staticmethod
     def recvall(sock, n):
@@ -182,6 +181,6 @@ class messageProt:
         seqNumber = messageProt.getSeqBinary(seqRaw)
         #print(f" non raw seq is {seqNumber}")
         dataFull = dataFull[4:]
-        print(dataFull)
-        print("decoded is ")
+        #print(dataFull)
+        #print("decoded is ")
         return self.decrypt_from_json_string(dataFull.decode()) if self.aes_used else dataFull.decode(), seqNumber

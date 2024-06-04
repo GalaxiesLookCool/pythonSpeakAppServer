@@ -6,7 +6,6 @@ import sys
 import time
 import threading
 import random
-import base64
 
 from sqlite3 import Error
 from hashlib import sha256
@@ -16,6 +15,8 @@ TOKEN_LENGTH = 20
 
 log = logging.getLogger(__name__)
 
+def print(*args, **kwargs):
+    pass
 
 def create_connection(db_file):
     """ create a database connection to the SQLite database
@@ -87,7 +88,7 @@ class LockableSqliteConnection:
         sql_comm = """SELECT * FROM chats WHERE type=2 AND groupmembersbyid=?"""
         return (len(self.query(sql_comm, (json.dumps([user_id1, user_id2]),))) > 0) or (len(self.query(sql_comm, (json.dumps([user_id2, user_id1]),))) > 0)
 
-    def create_one_on_one_chat(self, user_id1: int, user_id2: int) -> str:
+    def create_one_on_one_chat(self, user_id1: int, user_id2: int) -> int:
         """
         Creates a one on one chat for these 2 specific users in the db
         :param user_id1: user id of first user
@@ -97,10 +98,10 @@ class LockableSqliteConnection:
         sql_comm = """INSERT INTO chats (name,groupmembersbyid,type) VALUES ("",?,?)"""
         new_id = self.query(sql_comm, (json.dumps([user_id1, user_id2]), 2))
         return new_id
-        
+
 
     def save_new_msg(self, group_id: str, sender_id: str, text_content: str, time_sent: str, msg_type: str,
-                     attachments: list) -> str:
+                     attachments: list) -> int:
         """
         Saves a new message to the database
         :param group_id: group id
@@ -132,7 +133,7 @@ class LockableSqliteConnection:
         update_query = """UPDATE users SET arrayOfChats=? WHERE id=?"""
         self.query(update_query, (json.dumps(chat_ids), user_id))
 
-    def make_new_chat(self, group_name: str, group_picture: str, group_type: str, group_members: list[str], creator_id : int) -> str:
+    def make_new_chat(self, group_name: str, group_picture: str, group_type: str, group_members: list[str], creator_id : int) -> int:
         """
         Creates a new chat in db (new table and new row)
         :param group_name: group name
@@ -145,8 +146,7 @@ class LockableSqliteConnection:
         create_row_query = """INSERT INTO chats (name, picture, type, groupmembersbyid, metadata) VALUES (?,?,?,?,?)"""
         new_id = self.query(create_row_query, (group_name, group_picture, group_type, json.dumps(group_members), json.dumps({"admins" : [creator_id]})))
         new_table_command = f"""CREATE TABLE IF NOT EXISTS chat{new_id} (msgid integer PRIMARY KEY, senderid integer, lastedited text, textcontent text, timesent text, type text, attachments text, {', '.join(list(map(lambda user_id: "user" + str(user_id) + " integer DEFAULT 0", group_members)))})"""
-        with self:
-            self.cursor.execute(new_table_command)
+        self.query(new_table_command)
         return new_id
 
     def is_group_exists(self, group_id : str) -> bool:
@@ -211,7 +211,7 @@ class LockableSqliteConnection:
             return_list.append(basic_dict)
         return return_list
 
-    def update_user_info(self, uid : str, new_name : str, new_b64 : str) -> str:
+    def update_user_info(self, uid : str, new_name : str, new_b64 : str) -> int:
         """
         Updates the user info in the db
         :param uid: user id
@@ -413,7 +413,7 @@ class LockableSqliteConnection:
         sql_query = """SELECT * FROM users WHERE email=? AND password=? AND enabled=1"""
         return len(self.query(sql_query, (email, password))) > 0
 
-    def save_new_user_to_db(self, email: str, password: str, username: str, imageb64: str) -> str:
+    def save_new_user_to_db(self, email: str, password: str, username: str, imageb64: str) -> int:
         """
         Saves a new user to the db (into users table - email, name, arrayofchats, password, picture)
         Returns the user id
@@ -426,7 +426,7 @@ class LockableSqliteConnection:
         sql_query = """INSERT INTO users (email, uname, arrayOfChats, password, picture, enabled) VALUES (?,?,?,?,?,0)"""
         return self.query(sql_query, (email, username, json.dumps([]), sha256(password.encode('utf-8')).hexdigest(), imageb64))
 
-    def enable_user(self, uid : int | str) -> str:
+    def enable_user(self, uid : int | str) -> int:
         """
         Enables a user in the db (enabled=1)
         :param uid: the id of the user to enable
@@ -489,7 +489,7 @@ class LockableSqliteConnection:
         :return: the new token
         """
         token = ''.join(random.choices(string.ascii_uppercase + string.digits, k=10))
-        sql_query = """UPDATE users SET lastissuedtoken=? WHERE id=?"""
+        sql_query = """UPDATE users SET lastissued2fatoken=? WHERE id=?"""
         self.query(sql_query, (token, id))
         return token
 
@@ -499,7 +499,7 @@ class LockableSqliteConnection:
         :param id: the id of the user to get the token for
         :return: the latest 2fa token for the user
         """
-        latest_tok = self.query("""SELECT lastissuedtoken FROM users WHERE id=?""", (id,))[0][0]
+        latest_tok = self.query("""SELECT lastissued2fatoken FROM users WHERE id=?""", (id,))[0][0]
         print("latest tok is")
         print(latest_tok)
         return latest_tok
@@ -560,34 +560,35 @@ class LockableSqliteConnection:
         """
         self.lock = threading.Lock()
         self.connection = sqlite3.connect(dburi, uri=True, check_same_thread=False)
-        self.cursor = None
+        print("self connection autocommit is")
+        print(self.connection.autocommit)
+        print("printed")
+        self.connection.execute('pragma journal_mode=wal')
+        self.connection.autocommit = False
+        #self.connection.execute('pragma journal_mode=DELETE')
+        #self.cursor = None
+        self.commitCounter = 0
+        self.commitLimit = 100
 
     def __enter__(self):
         """
-        Initializes the cursor and locks the database connection
+        locks the database connection
         :return: itself (for context manager)
         """
         self.lock.acquire()
-        # print("acquired")
-        self.cursor = self.connection.cursor()
         return self
 
     def __exit__(self, _, value, traceback):
         """
-        Closes the cursor and unlocks the database connection
+        unlocks the database connection
         :param _: the exception type
         :param value: the exception value
         :param traceback: the exception traceback
         :return: None
         """
-        self.connection.commit()
-        if self.cursor is not None:
-            self.cursor.close()
-            self.cursor = None
         self.lock.release()
-        # print("released")
 
-    def query(self, query_string, values=tuple()):
+    def query(self, query_string, values=tuple()) -> int | list | None:
         """
         function that executes a sql query and returns an appropriate value
         :param query_string: string that represents the full sql query
@@ -597,16 +598,27 @@ class LockableSqliteConnection:
 
         #print(f"query is {query_string}")
         with self:
-            self.cursor.execute(query_string, values)
+            #self.cursor.execute(query_string, values)
+            conn = self.connection.execute(query_string, values)
             match query_string[0:1]:
                 case "S":
-                    rows = self.cursor.fetchall()
+                    #rows = self.cursor.fetchall()
+                    rows = conn.fetchall()
                     return rows
                 case "I":
-                    self.connection.commit()
-                    return self.cursor.lastrowid
+                    #self.connection.commit()
+                    if self.commitCounter >= self.commitLimit:
+                        self.connection.commit()
+                        self.commitCounter = 0
+                    self.commitCounter += 1
+                    return conn.lastrowid
+                    #return self.cursor.lastrowid
                 case _:
-                    self.connection.commit()
+                    #self.connection.commit()
+                    if self.commitCounter >= self.commitLimit:
+                        self.connection.commit()
+                        self.commitCounter = 0
+                    self.commitCounter += 1
 
     def update_msg_read_receipt(self, user_id : int, group_id : str, msg_id : str, time_read : str) -> None:
         """
@@ -641,7 +653,7 @@ class LockableSqliteConnection:
         sql_query = f"""SELECT * FROM chat{group_id} WHERE msgid=?"""
         return len(self.query(sql_query, (message_id,))) > 0
 
-    def edit_message(self, group_id : str, message_id : str, new_text : str) -> str:
+    def edit_message(self, group_id : str, message_id : str, new_text : str) -> int:
         """
         Edits a message's content
         :param group_id: the group id where the message is

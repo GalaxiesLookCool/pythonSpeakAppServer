@@ -14,7 +14,6 @@ from pathlib import Path
 import shutil
 
 
-
 import dataBaseClass
 import default_image
 import messageProt
@@ -27,6 +26,8 @@ import logging
 
 CHUNK_SIZE = 1024
 
+def print(*args, **kwargs):
+    pass
 
 def is_file_in_use(file_path):
     """
@@ -45,6 +46,17 @@ def is_file_in_use(file_path):
         return True
     else:
         return False
+
+def resize_image(image_b64, height=30, width=30):
+    pic_b64_raw_data = image_b64.split(";base64,")[1]
+    # print(pic_b64_raw_data)
+    pic_data = Image.open(BytesIO(base64.b64decode(pic_b64_raw_data)))
+    pic_data = pic_data.resize((width, height))
+    buffered = BytesIO()
+    pic_data.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue())
+    # img_str = base64.b64encode(buffered.getvalue())
+    return image_b64.split(";base64,")[0] + ";base64," + img_str.decode()
 
 class user_handler_object:
     def do_fetch(self, fetch_args : dict):
@@ -152,19 +164,8 @@ class user_handler_object:
                     create_args["picture"] = None
                 else:
                     pic = create_args["picture"]
-                    pic_b64_raw_data = pic.split(";base64,")[1]
-                    # print(pic_b64_raw_data)
-                    pic_data = Image.open(BytesIO(base64.b64decode(pic_b64_raw_data)))
-                    print(pic_data)
-                    pic_data = pic_data.resize((200, 200))
-                    print(pic_data)
-                    buffered = BytesIO()
-                    pic_data.save(buffered, format="PNG")
-                    print(buffered)
-                    img_str = base64.b64encode(buffered.getvalue())
-                    print(img_str.decode())
-                    # img_str = base64.b64encode(buffered.getvalue())
-                    create_args["picture"] = pic.split(";base64,")[0] + ";base64," + img_str.decode()
+                    pic = resize_image(pic)
+                    create_args["picture"] = pic
                     print(create_args["picture"])
                 if self.sql_lockable.is_email_exists(create_args["email"]):
                     raise ValueError("Email already being used!")
@@ -256,6 +257,7 @@ class user_handler_object:
             newtoken = self.sql_lockable.set_and_get_new_token(id,ip_addr)
             if "isserver" in login_args:
                 self.sql_lockable.set_server_token(newtoken)
+            print(newtoken)
             return newtoken
 
         if "email" not in login_args and "password" not in login_args:
@@ -307,6 +309,8 @@ class user_handler_object:
                     raise ValueError("missing new image b64")
                 if update_args["new_image_b64"] == default_image.DEFAULT_CHAT_IMAGE:
                     update_args["new_image_b64"] = ""
+                else:
+                    update_args["new_image_b64"] = resize_image(update_args["new_image_b64"])
                 self.sql_lockable.update_user_info(uid, update_args["new_name"], update_args["new_image_b64"])
             case "file-finalize":
                 if "file_name" not in update_args:
@@ -370,6 +374,7 @@ class user_handler_object:
                     raise ValueError("invalid 2fa code. sent new one to the email!")
                 self.sql_lockable.delete_code(update_args["id"])
                 self.sql_lockable.enable_user(update_args["id"])
+                print("done updating user2fa")
             case "msg-delete":
                 if "msg_id" not in update_args:
                     raise ValueError("missing msgid!")
@@ -573,8 +578,10 @@ class user_handler_object:
         try:
             while True:
                 (new_message_string, seq) = self.sock.recv_msg()
-                print(new_message_string)
-                message_dict = user_handler_object.decode_string(new_message_string)
+                try:
+                    message_dict = user_handler_object.decode_string(new_message_string)
+                except json.decoder.JSONDecodeError:
+                    continue #invalid message - wasnt in JSON format, so we will just skip it
                 try:
                     message_type = message_dict["type"]
                     if f"{message_type}-args" not in message_dict:
@@ -640,8 +647,6 @@ class user_handler_object:
                 except Exception as e: #if getting this - something is wrong, and we need to document it
                     print("GOT EXCEPTIONNNNNNNNNN")
                     traceback.print_exc()
-        except TypeError:
-            exit()
         except Exception:
             self.log.warning(traceback.format_exc())
         finally:
@@ -650,6 +655,7 @@ class user_handler_object:
                 self.do_signout(token)
             else:
                 print("supposadly server token type?")
+            exit()
 
 
 
@@ -664,6 +670,7 @@ class user_handler_object:
 
 def start_thread(broadcaster_instance, socket, sql_lockable, voip_server):
     """
+
     the start function of the thread. will handle setting up the object
     :param broadcaster_instance: the broadcaster instance to use in the thread
     :param socket: the messageprot instance to use in the thread

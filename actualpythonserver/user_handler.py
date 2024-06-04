@@ -133,7 +133,10 @@ class BroadCaster:
                 for uid in target_ids:
                     if uid in self.users_dict:
                         for sock,_ in self.users_dict[uid]:
-                            sock.send_msg( json.dumps(new_message))
+                            newThread = threading.Thread(target=messageProt.messageProt.send_msg,
+                                                         args=(sock, json.dumps(new_message)))
+                            newThread.start()
+                            #sock.send_msg( json.dumps(new_message))
             case "msg-delete":
                 msg_id = event_data["update-args"]["msg_id"]
                 group_id = event_data["update-args"]["group_id"]

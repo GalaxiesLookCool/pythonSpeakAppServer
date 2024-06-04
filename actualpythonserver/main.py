@@ -21,6 +21,7 @@ import user_handler
 from voip_server import voip_server_class
 from user_handler_oop import start_thread
 
+
 def func(signum, frame):
     """
     function that handles the SIGINT signal
@@ -44,6 +45,7 @@ def createConn():
     :return: the socket
     """
     socketServer = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #socketServer.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     socketServer.bind((HOSTBIND, HOSTPORT))
     socketServer.listen(1)
     return socketServer
@@ -60,7 +62,7 @@ sql_create_users_table = """ CREATE TABLE IF NOT EXISTS users (
                                         picture text,
                                         enabled integer NOT NULL,
                                         lastcode text,
-                                        lastissuedtoken text
+                                        lastissued2fatoken text
                                     ); """
 sql_create_chats_table = """ CREATE TABLE IF NOT EXISTS chats (
                                         id integer PRIMARY KEY,
